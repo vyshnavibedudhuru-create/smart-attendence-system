@@ -1,0 +1,294 @@
+<!--
+Smart Attendance System
+Files included below as separate sections: index.html, style.css, script.js, README.md
+Copy each section into its own file to run locally.
+-->
+
+<!-- ===== index.html ===== -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Attendance System</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="container">
+      <h1>📋 Smart Attendance System</h1>
+      <div class="user-actions">
+        <button id="logoutBtn" class="btn hidden">Logout</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <!-- Simple login (admin) -->
+    <section id="loginSection" class="card">
+      <h2>Admin Login</h2>
+      <form id="loginForm">
+        <label>Password</label>
+        <input type="password" id="adminPassword" placeholder="Enter admin password" required />
+        <button class="btn primary" type="submit">Login</button>
+      </form>
+      <p class="muted">Default password: <code>admin123</code></p>
+    </section>
+
+    <!-- Dashboard -->
+    <section id="dashboard" class="hidden">
+      <div class="dash-row">
+        <div class="card small">
+          <h3>Today: <span id="todayDate"></span></h3>
+          <label>Choose Date</label>
+          <input type="date" id="datePicker" />
+        </div>
+
+        <div class="card small">
+          <h3>Quick Actions</h3>
+          <button id="markAllPresent" class="btn">Mark All Present</button>
+          <button id="clearAttendance" class="btn">Clear Today's</button>
+          <button id="exportCsv" class="btn primary">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Students</h2>
+        <form id="addStudentForm" class="inline-form">
+          <input id="sName" placeholder="Full name" required />
+          <input id="sRoll" placeholder="Roll number" required />
+          <button class="btn" type="submit">Add Student</button>
+        </form>
+
+        <div id="studentsTableWrap"></div>
+      </div>
+
+      <div class="card">
+        <h2>Attendance Summary</h2>
+        <div id="summary"></div>
+      </div>
+    </section>
+
+    <footer class="muted small" style="margin-top:20px">Built with ❤️ — Local demo (no server) — Data saved to <code>localStorage</code></footer>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+</html>
+
+
+/* ===== style.css ===== */
+:root{--bg:#f5f7fb;--card:#ffffff;--accent:#0b74de;--muted:#6b7280}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter,system-ui,Arial;background:var(--bg);color:#111}
+.container{max-width:1000px;margin:0 auto;padding:20px}
+.topbar{background:#fff;border-bottom:1px solid rgba(0,0,0,0.04)}
+.topbar .container{display:flex;align-items:center;justify-content:space-between}
+h1{font-size:1.25rem}
+.btn{padding:8px 10px;border-radius:8px;border:1px solid rgba(0,0,0,0.08);background:#fff;cursor:pointer}
+.btn.primary{background:var(--accent);color:#fff;border:none}
+.card{background:var(--card);padding:16px;border-radius:10px;margin-top:16px;box-shadow:0 8px 20px rgba(7,12,20,0.06)}
+.card.small{padding:12px}
+.hidden{display:none}
+.inline-form{display:flex;gap:8px;align-items:center}
+.inline-form input{padding:8px;border-radius:8px;border:1px solid #e6e6e6}
+input[type="date"]{padding:8px;border-radius:8px;border:1px solid #e6e6e6}
+label{display:block;margin-bottom:6px;color:var(--muted)}
+.muted{color:var(--muted)}
+.dash-row{display:flex;gap:16px}
+@media(max-width:800px){.dash-row{flex-direction:column}}
+.table{width:100%;border-collapse:collapse;margin-top:12px}
+.table th,.table td{padding:10px;border-bottom:1px solid #f1f1f1;text-align:left}
+.checkbox{width:18px;height:18px}
+.status-present{color:green;font-weight:700}
+.status-absent{color:#d14343;font-weight:700}
+.summary-item{display:flex;gap:12px;align-items:center;margin-top:8px}
+.small{font-size:0.9rem}
+
+
+/* ===== script.js ===== */
+// Simple Smart Attendance System - client-side demo
+const STORAGE_KEYS = { STUDENTS: 'sa_students', ATTENDANCE: 'sa_attendance' };
+
+// Sample students
+let students = JSON.parse(localStorage.getItem(STORAGE_KEYS.STUDENTS) || 'null') || [
+  { id: 1, name: 'Asha Reddy', roll: '101' },
+  { id: 2, name: 'Ravi Kumar', roll: '102' },
+  { id: 3, name: 'Meera Singh', roll: '103' }
+];
+
+// attendance is an object keyed by date (YYYY-MM-DD) -> array of {studentId, present}
+let attendance = JSON.parse(localStorage.getItem(STORAGE_KEYS.ATTENDANCE) || 'null') || {};
+
+// DOM
+const loginSection = document.getElementById('loginSection');
+const dashboard = document.getElementById('dashboard');
+const loginForm = document.getElementById('loginForm');
+const logoutBtn = document.getElementById('logoutBtn');
+const todayDateEl = document.getElementById('todayDate');
+const datePicker = document.getElementById('datePicker');
+const studentsTableWrap = document.getElementById('studentsTableWrap');
+const addStudentForm = document.getElementById('addStudentForm');
+const sName = document.getElementById('sName');
+const sRoll = document.getElementById('sRoll');
+const markAllPresentBtn = document.getElementById('markAllPresent');
+const clearAttendanceBtn = document.getElementById('clearAttendance');
+const exportCsvBtn = document.getElementById('exportCsv');
+const summaryEl = document.getElementById('summary');
+
+function saveAll(){
+  localStorage.setItem(STORAGE_KEYS.STUDENTS, JSON.stringify(students));
+  localStorage.setItem(STORAGE_KEYS.ATTENDANCE, JSON.stringify(attendance));
+}
+
+function formatDate(d = new Date()){ return d.toISOString().slice(0,10); }
+
+// init
+const today = formatDate();
+todayDateEl.innerText = today;
+datePicker.value = today;
+
+function renderStudentsForDate(date){
+  const todays = attendance[date] || [];
+  const map = new Map(todays.map(a=>[a.studentId, a.present]));
+
+  let html = `
+    <table class="table">
+      <thead><tr><th>Roll</th><th>Name</th><th>Present</th></tr></thead>
+      <tbody>
+  `;
+  students.forEach(s => {
+    const present = map.get(s.id) || false;
+    html += `
+      <tr>
+        <td>${s.roll}</td>
+        <td>${s.name}</td>
+        <td><input type="checkbox" class="checkbox" data-id="${s.id}" ${present? 'checked':''}></td>
+      </tr>
+    `;
+  });
+  html += `</tbody></table>`;
+  studentsTableWrap.innerHTML = html;
+
+  // add listeners
+  document.querySelectorAll('.checkbox').forEach(cb => {
+    cb.addEventListener('change', (e)=>{
+      const id = Number(e.target.dataset.id);
+      setAttendance(date, id, e.target.checked);
+    });
+  });
+}
+
+function setAttendance(date, studentId, present){
+  if(!attendance[date]) attendance[date] = [];
+  const arr = attendance[date];
+  const idx = arr.findIndex(a=>a.studentId===studentId);
+  if(idx>=0){ arr[idx].present = present; } else { arr.push({studentId, present}); }
+  saveAll(); renderSummary(date);
+}
+
+function renderSummary(date){
+  const todays = attendance[date] || [];
+  const presentCount = todays.filter(a=>a.present).length;
+  const total = students.length;
+  summaryEl.innerHTML = `
+    <div class="summary-item"><strong>Total students:</strong> <span>${total}</span></div>
+    <div class="summary-item"><strong>Present:</strong> <span class="status-present">${presentCount}</span></div>
+    <div class="summary-item"><strong>Absent:</strong> <span class="status-absent">${total - presentCount}</span></div>
+  `;
+}
+
+addStudentForm.addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const name = sName.value.trim();
+  const roll = sRoll.value.trim();
+  if(!name || !roll) return alert('Please enter name and roll');
+  const id = students.reduce((m,x)=>Math.max(m,x.id),0)+1;
+  students.push({id,name,roll});
+  saveAll();
+  sName.value = '';
+  sRoll.value = '';
+  renderStudentsForDate(datePicker.value);
+  renderSummary(datePicker.value);
+});
+
+markAllPresentBtn.addEventListener('click', ()=>{
+  const date = datePicker.value;
+  attendance[date] = students.map(s=>({studentId:s.id,present:true}));
+  saveAll(); renderStudentsForDate(date); renderSummary(date);
+});
+
+clearAttendanceBtn.addEventListener('click', ()=>{
+  const date = datePicker.value;
+  delete attendance[date]; saveAll(); renderStudentsForDate(date); renderSummary(date);
+});
+
+exportCsvBtn.addEventListener('click', ()=>{
+  const date = datePicker.value;
+  const todays = attendance[date] || [];
+  const map = new Map(todays.map(a=>[a.studentId, a.present]));
+  const rows = [['Roll','Name','Present']];
+  students.forEach(s=>rows.push([s.roll, s.name, map.get(s.id)? 'Present':'Absent']));
+  const csv = rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = `attendance_${date}.csv`; a.click(); URL.revokeObjectURL(url);
+});
+
+// date change
+datePicker.addEventListener('change', ()=>{ renderStudentsForDate(datePicker.value); renderSummary(datePicker.value); });
+
+// simple login flow (client-only for demo)
+loginForm.addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const pw = document.getElementById('adminPassword').value;
+  if(pw === 'admin123'){
+    loginSection.classList.add('hidden');
+    dashboard.classList.remove('hidden');
+    logoutBtn.classList.remove('hidden');
+    renderStudentsForDate(datePicker.value);
+    renderSummary(datePicker.value);
+  } else {
+    alert('Incorrect password');
+  }
+});
+
+logoutBtn.addEventListener('click', ()=>{
+  loginSection.classList.remove('hidden');
+  dashboard.classList.add('hidden');
+  logoutBtn.classList.add('hidden');
+});
+
+// init UI for non-logged
+renderStudentsForDate(datePicker.value); renderSummary(datePicker.value);
+
+/* ===== README.md ===== */
+# Smart Attendance System (Static Demo)
+
+This is a front-end demo of a Smart Attendance System built with plain HTML, CSS and JavaScript. It is intentionally client-side and stores data in `localStorage` so you can run it without a server.
+
+Features:
+- Admin login (client-only; default password `admin123`)
+- Add / list students (roll number + name)
+- Pick a date and mark attendance (checkbox per student)
+- Mark all present, clear today's attendance
+- Export attendance CSV for selected date
+- Attendance history saved per-date in `localStorage`
+
+Limitations & next steps you can implement:
+- Connect to a backend (Node/Firebase) to persist data securely
+- Add biometric / face recognition integration (requires server & model)
+- Add class/section filters, reports, and analytics
+- Add role-based authentication and mobile-friendly camera scan (QR / NFC)
+
+To run:
+1. Save `index.html`, `style.css`, and `script.js` into the same folder.
+2. Open `index.html` in your browser.
+
+Want me to:
+1) Convert to a React app and prepare a Git repo? 
+2) Integrate with Firebase Auth + Firestore + Storage? 
+3) Add QR-based student check-in demo using device camera? 
+4) Turn into a printable attendance report with charts?
+
+Reply which option you'd like and I'll implement it.
